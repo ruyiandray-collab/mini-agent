@@ -1,0 +1,1 @@
+﻿周二：第一次调通 DeepSeek API，理解了 messages 里 role 的含义。

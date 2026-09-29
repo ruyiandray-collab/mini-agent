@@ -1,0 +1,17 @@
+.env
+__pycache__/
+.venv/
+logs/*.json
+# 工作区只上传示例笔记，Agent 生成的文件不上传
+workspace/*
+!workspace/notes/
+workspace/notes/*
+!workspace/notes/monday.txt
+!workspace/notes/tuesday.txt
+!workspace/notes/wednesday.txt
+# 个人记忆和日志属于隐私，不上传
+memory/
+.pytest_cache/
+
+# 其他软件自动生成的文件
+.Rhistory
