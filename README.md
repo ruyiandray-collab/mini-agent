@@ -1,4 +1,4 @@
-# MiniAgent：从零实现的工具调用型 AI Agent
+﻿# MiniAgent：从零实现的工具调用型 AI Agent
 
 一个运行在命令行里的 AI Agent：接收自然语言任务后，**自主决定调用哪些工具、调用几次**，多步完成文件处理、计算、信息记忆等任务。
 
@@ -95,7 +95,7 @@ MiniAgent：你叫 Ray，喜欢玩游戏。
 ## 快速开始
 
 ```bash
-git clone https://github.com/<你的用户名>/mini-agent.git
+git clone https://github.com/ruyiandray-collab/mini-agent.git
 cd mini-agent
 python -m venv .venv
 .venv\Scripts\activate            # macOS/Linux: source .venv/bin/activate
