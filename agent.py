@@ -47,13 +47,15 @@ def build_system_prompt() -> str:
 
 
 class Agent:
-    def __init__(self, max_steps: int = 10):
+    def __init__(self, max_steps: int = 10, verbose: bool = True):
         api_key = os.getenv("DEEPSEEK_API_KEY")
         if not api_key or "在这里填" in api_key:
             raise RuntimeError("请先把 .env.example 复制为 .env，并填入你的 DeepSeek API Key")
         self.client = OpenAI(api_key=api_key, base_url=os.getenv("BASE_URL", "https://api.deepseek.com"))
         self.model = os.getenv("MODEL", "deepseek-chat")
         self.max_steps = max_steps
+        self.verbose = verbose  # 评测时设为 False，不打印中间过程
+        self.stats = {}         # 最近一轮的运行统计：步数、调用的工具、token 用量
         # messages[0] 永远是系统提示词，后面接上次保存的对话历史（短期记忆）
         self.messages = [{"role": "system", "content": build_system_prompt()}] + memory.load_history()
 
@@ -67,13 +69,17 @@ class Agent:
         self.messages[0]["content"] = build_system_prompt()
         for attempt in range(1, retries + 1):
             try:
-                return self.client.chat.completions.create(
+                resp = self.client.chat.completions.create(
                     model=self.model, messages=self.messages, tools=TOOL_SCHEMAS
                 )
+                if getattr(resp, "usage", None):
+                    self.stats["prompt_tokens"] += resp.usage.prompt_tokens
+                    self.stats["completion_tokens"] += resp.usage.completion_tokens
+                return resp
             except RETRYABLE_ERRORS as e:
                 if attempt == retries:
                     raise
-                console.print(f"[yellow]调用失败（{e}），{attempt * 2} 秒后第 {attempt + 1} 次尝试...[/]")
+                self._print(f"[yellow]调用失败（{e}），{attempt * 2} 秒后第 {attempt + 1} 次尝试...[/]")
                 time.sleep(attempt * 2)
 
     def run(self, user_input: str) -> str:
@@ -90,8 +96,10 @@ class Agent:
 
     def _run(self, user_input: str) -> str:
         self.messages.append({"role": "user", "content": user_input})
+        self.stats = {"steps": 0, "tool_calls": [], "prompt_tokens": 0, "completion_tokens": 0}
 
         for step in range(1, self.max_steps + 1):
+            self.stats["steps"] = step
             msg = self._call_llm().choices[0].message
             # 转成普通字典再存入历史，方便之后保存成 JSON 日志
             self.messages.append(msg.model_dump(exclude_none=True))
@@ -103,18 +111,23 @@ class Agent:
 
             # 模型在调用工具前说的话，相当于它的「思考过程」
             if msg.content:
-                console.print(f"[dim]💭 {msg.content}[/]")
+                self._print(f"[dim]💭 {msg.content}[/]")
 
             for call in msg.tool_calls:
                 name, args = call.function.name, call.function.arguments
-                console.print(f"[cyan]🔧 第 {step} 步 调用 {name}({args})[/]")
+                self.stats["tool_calls"].append(name)
+                self._print(f"[cyan]🔧 第 {step} 步 调用 {name}({args})[/]")
                 result = execute_tool(name, args)
                 preview = result if len(result) < 300 else result[:300] + "..."
-                console.print(Panel(preview, title="结果", border_style="green" if not result.startswith("错误") else "red"))
+                self._print(Panel(preview, title="结果", border_style="green" if not result.startswith("错误") else "red"))
                 self.messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
 
         self._save_log()
         return f"已达到最大步数 {self.max_steps}，任务未完成。"
+
+    def _print(self, content):
+        if self.verbose:
+            console.print(content)
 
     def _save_log(self):
         """把完整对话轨迹保存为 JSON，方便调试和复盘。"""
